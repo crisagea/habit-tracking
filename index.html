@@ -1,0 +1,765 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Planificador Saludable (offline)</title>
+    <!-- Bootstrap 5 -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        :root{
+            --green:#28a745; --orange:#fd7e14; --red:#dc3545; --gray:#adb5bd;
+        }
+        body{ background:#f8f9fa; }
+        .brand{ font-weight:700; letter-spacing:.2px; }
+        .status-dot{ width:14px; height:14px; border-radius:50%; display:inline-block; margin-right:.5rem; border:1px solid rgba(0,0,0,.1)}
+        .status-0{ background:var(--gray);} /* sin marcar */
+        .status-1{ background:var(--green);} /* OK */
+        .status-2{ background:var(--orange);} /* sano pero no pautado */
+        .status-3{ background:var(--red);} /* mal */
+        .meal-card{ transition:transform .08s ease-in-out; }
+        .meal-card:active{ transform:scale(.99); }
+        .shopping-row small{ color:#6c757d; }
+        .pointer{ cursor:pointer; }
+        .week-badge{ font-variant-numeric: tabular-nums; }
+        .grid-quin{ display:grid; grid-template-columns: repeat(7, 1fr); gap:.5rem; }
+        .day-cell{ background:white; border:1px solid #e9ecef; border-radius:.5rem; padding:.5rem; }
+        .day-cell h6{ font-size:.9rem; margin:0 0 .25rem; }
+        .legend-dot{ width:10px; height:10px; border-radius:50%; display:inline-block; margin-right:.25rem; border:1px solid rgba(0,0,0,.1)}
+        .btn-ghost{ background:transparent; border:1px dashed #ced4da; }
+        .card-clean{ border:1px solid #e9ecef; }
+        .sticky-footer{ position:sticky; bottom:0; background:#fff; border-top:1px solid #e9ecef; padding:.5rem; }
+        .form-check-input:checked{ background-color:#0d6efd; border-color:#0d6efd; }
+        .small-muted{ font-size:.9rem; color:#6c757d; }
+    </style>
+</head>
+<body>
+<nav class="navbar navbar-expand-lg bg-white border-bottom sticky-top">
+    <div class="container">
+        <a class="navbar-brand brand" href="#">🥗 Planificador Saludable</a>
+        <div class="ms-auto d-flex gap-2">
+            <button class="btn btn-outline-secondary btn-sm" id="btnExport">Exportar datos</button>
+            <label class="btn btn-outline-primary btn-sm mb-0" for="importFile">Importar</label>
+            <input type="file" id="importFile" accept="application/json" class="d-none" />
+        </div>
+    </div>
+</nav>
+
+<main class="container py-3">
+    <div class="row g-3">
+        <div class="col-12">
+            <ul class="nav nav-pills" id="mainTabs" role="tablist">
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link active" id="tab-hoy" data-bs-toggle="tab" data-bs-target="#pane-hoy" type="button" role="tab">Hoy</button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="tab-quin" data-bs-toggle="tab" data-bs-target="#pane-quin" type="button" role="tab">Quincena</button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="tab-lista" data-bs-toggle="tab" data-bs-target="#pane-lista" type="button" role="tab">Lista de la compra</button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="tab-habitos" data-bs-toggle="tab" data-bs-target="#pane-habitos" type="button" role="tab">Hábitos</button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="tab-config" data-bs-toggle="tab" data-bs-target="#pane-config" type="button" role="tab">Config</button>
+                </li>
+            </ul>
+        </div>
+
+        <div class="col-12">
+            <div class="tab-content">
+                <!-- HOY -->
+                <div class="tab-pane fade show active" id="pane-hoy" role="tabpanel">
+                    <div class="d-flex align-items-center justify-content-between mb-2">
+                        <div>
+                            <h4 class="mb-0" id="hoyTitle">Hoy</h4>
+                            <div class="small-muted" id="weekInfo"></div>
+                        </div>
+                        <div class="d-flex gap-2">
+                            <button class="btn btn-outline-secondary btn-sm" id="btnPrevDay">◀ Ayer</button>
+                            <button class="btn btn-outline-secondary btn-sm" id="btnNextDay">Mañana ▶</button>
+                        </div>
+                    </div>
+                    <div id="cardsHoy" class="row g-3"></div>
+                    <div class="mt-3 small-muted">
+                        <span class="legend-dot" style="background:var(--green)"></span> Verde = Pautado &nbsp;·&nbsp;
+                        <span class="legend-dot" style="background:var(--orange)"></span> Naranja = Sano pero distinto &nbsp;·&nbsp;
+                        <span class="legend-dot" style="background:var(--red)"></span> Rojo = Mal
+                    </div>
+                </div>
+
+                <!-- QUINCENA -->
+                <div class="tab-pane fade" id="pane-quin" role="tabpanel">
+                    <div class="d-flex align-items-end justify-content-between mb-2">
+                        <div>
+                            <h4 class="mb-0">Resumen 14 días</h4>
+                            <div class="small-muted">Semáforos por comida y conteos de hábitos.</div>
+                        </div>
+                        <div class="d-flex gap-2">
+                            <button class="btn btn-outline-secondary btn-sm" id="btnPrev14">◀ -14d</button>
+                            <button class="btn btn-outline-secondary btn-sm" id="btnNext14">+14d ▶</button>
+                        </div>
+                    </div>
+                    <div id="quinStats" class="row g-3"></div>
+                    <div class="grid-quin mt-2" id="quinGrid"></div>
+                </div>
+
+                <!-- LISTA COMPRA -->
+                <div class="tab-pane fade" id="pane-lista" role="tabpanel">
+                    <div class="d-flex align-items-center justify-content-between mb-2">
+                        <h4 class="mb-0">Lista de la compra</h4>
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="toggleVerduras" checked>
+                            <label class="form-check-label" for="toggleVerduras">Incluir "verduras infinitas"</label>
+                        </div>
+                    </div>
+                    <div class="row g-3">
+                        <div class="col-12 col-lg-8">
+                            <div class="card card-clean">
+                                <div class="card-body">
+                                    <div class="d-flex gap-2 mb-3">
+                                        <select id="weekSelect" class="form-select form-select-sm" style="max-width: 220px;"></select>
+                                        <button class="btn btn-primary btn-sm" id="btnGenLista">Regenerar</button>
+                                        <button class="btn btn-outline-secondary btn-sm" id="btnCopyLista">Copiar</button>
+                                        <button class="btn btn-outline-secondary btn-sm" id="btnPrintLista">Imprimir</button>
+                                    </div>
+                                    <div id="listaCompra"></div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-12 col-lg-4">
+                            <div class="card card-clean">
+                                <div class="card-body">
+                                    <h6>Observaciones</h6>
+                                    <ul class="small-muted mb-2">
+                                        <li>Las cantidades agregan toda la semana seleccionada.</li>
+                                        <li>Puedes editar los ítems directamente; se guardan en local.</li>
+                                    </ul>
+                                    <button class="btn btn-ghost w-100" id="btnAddItem">+ Añadir ítem manual</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- HABITOS -->
+                <div class="tab-pane fade" id="pane-habitos" role="tabpanel">
+                    <div class="row g-3">
+                        <div class="col-12 col-lg-6">
+                            <div class="card card-clean">
+                                <div class="card-body">
+                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                        <h5 class="mb-0">💪 Gimnasio</h5>
+                                        <span class="badge text-bg-light" id="gymWeekBadge"></span>
+                                    </div>
+                                    <div class="input-group input-group-sm mb-2" style="max-width:260px;">
+                                        <span class="input-group-text">Hoy</span>
+                                        <button class="btn btn-outline-secondary" id="gymMinus">-</button>
+                                        <input type="number" min="0" class="form-control" id="gymToday" />
+                                        <button class="btn btn-outline-secondary" id="gymPlus">+</button>
+                                    </div>
+                                    <div id="gymWeek" class="d-flex flex-wrap gap-2"></div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-12 col-lg-6">
+                            <div class="card card-clean">
+                                <div class="card-body">
+                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                        <h5 class="mb-0">💩 Baño</h5>
+                                        <span class="badge text-bg-light" id="poopWeekBadge"></span>
+                                    </div>
+                                    <div class="input-group input-group-sm mb-2" style="max-width:260px;">
+                                        <span class="input-group-text">Hoy</span>
+                                        <button class="btn btn-outline-secondary" id="poopMinus">-</button>
+                                        <input type="number" min="0" class="form-control" id="poopToday" />
+                                        <button class="btn btn-outline-secondary" id="poopPlus">+</button>
+                                    </div>
+                                    <div id="poopWeek" class="d-flex flex-wrap gap-2"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- CONFIG -->
+                <div class="tab-pane fade" id="pane-config" role="tabpanel">
+                    <div class="row g-3">
+                        <div class="col-12 col-lg-6">
+                            <div class="card card-clean">
+                                <div class="card-body">
+                                    <h5>Datos del menú</h5>
+                                    <p class="small-muted">Puedes editar el JSON del menú. Cambios se guardan en localStorage.</p>
+                                    <textarea id="menuJson" class="form-control" rows="16"></textarea>
+                                    <div class="d-flex gap-2 mt-2">
+                                        <button class="btn btn-primary" id="btnSaveMenu">Guardar menú</button>
+                                        <button class="btn btn-outline-danger" id="btnResetAll">Reset total</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-12 col-lg-6">
+                            <div class="card card-clean">
+                                <div class="card-body">
+                                    <h5>Acerca de</h5>
+                                    <p class="mb-1 small-muted">Todo funciona offline usando <code>localStorage</code>. Puedes exportar/importar tus datos arriba.</p>
+                                    <ul class="small-muted">
+                                        <li>Semáforos por comida: 0 sin marcar, 1 verde, 2 naranja, 3 rojo.</li>
+                                        <li>Quincena: ventana deslizante de 14 días.</li>
+                                        <li>Lista de compra: agregación de cantidades por semana.</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+</main>
+
+<footer class="sticky-footer">
+    <div class="container d-flex justify-content-between small">
+        <div>© Tu planificación saludable</div>
+        <div id="storageInfo">Guardado local ✓</div>
+    </div>
+</footer>
+
+<script>
+    // ======= Datos base del menú (semana tipo) =======
+    const DEFAULT_MENU = {
+        "Lunes": {
+            "Desayuno": ["3 tortitas de legumbres","50g de pavo","40g de queso curado","20g de aguacate"],
+            "Comida": ["Verduras infinitas a elegir","Lomo de cerdo 150g","Quinoa 30g","Aceitunas verdes 8ud"],
+            "Merienda": ["50g de lomo embuchado","20g de frutos secos"],
+            "Cena": ["Verduras infinitas a elegir","2 huevos","Jamón serrano 50g","Aceitunas verdes 8ud"]
+        },
+        "Martes": {
+            "Desayuno": ["Griego ligero 150g","20g de avellanas","1 onza de chocolate","70g de frutos rojos"],
+            "Comida": ["Salmón 120g","Patata 150g","Aguacate 50g"],
+            "Merienda": ["50g de lomo embuchado","20g de frutos secos"],
+            "Cena": ["Salmón 120g","Aguacate 40g"]
+        },
+        "Miércoles": {
+            "Desayuno": ["3 tortitas de legumbres","50g de pavo","40g de queso curado","20g de aguacate"],
+            "Comida": ["Pescado blanco 200g","Patata 150g","Aguacate 40g"],
+            "Merienda": ["50g de lomo embuchado","20g de frutos secos"],
+            "Cena": ["2 latas de atún","Ensalada de tomate, calabacín y zanahoria"]
+        },
+        "Jueves": {
+            "Desayuno": ["Griego ligero 150g","20g de avellanas","1 onza de chocolate","70g de frutos rojos"],
+            "Comida": ["Pechuga de pollo 120g","Queso curado 40g","Aguacate 20g"],
+            "Merienda": ["50g de lomo embuchado"],
+            "Cena": ["Tortilla francesa (2 huevos)","40g de pavo","40g de queso curado"]
+        },
+        "Viernes": {
+            "Desayuno": ["3 tortitas de legumbres","50g de pavo","40g de queso curado","20g de aguacate"],
+            "Comida": ["Ternera 150g","Queso curado 40g","Aceitunas verdes 8ud"],
+            "Merienda": ["50g de lomo embuchado","20g de frutos secos"],
+            "Cena": ["Filete de pollo 150g","40g de aguacate"]
+        },
+        "Sábado": {
+            "Desayuno": ["Tortita de avena (35g avena + 120g claras + 5g cacao)","Yogur griego 80g"],
+            "Comida": ["Calamares 120g","Arroz 30g","Aceitunas verdes 8ud"],
+            "Cena": ["2 huevos cocidos","200g de patata","40g de queso curado"]
+        },
+        "Domingo": {
+            "Desayuno": ["Griego ligero 150g","20g de avellanas","1 onza de chocolate","70g de frutos rojos"],
+            "Comida": ["Garbanzos 90g","1 lata de atún (en cocido o ensalada)"],
+            "Cena": ["Fajipizza (de los ingredientes que quieras)"]
+        }
+    };
+
+    // ======= Utilidades de fecha =======
+    const DAY_NAMES = ["Domingo","Lunes","Martes","Miércoles","Jueves","Viernes","Sabado"];
+    const MEALS = ["Desayuno","Comida","Merienda","Cena"];
+    const todayISO = () => new Date().toISOString().slice(0,10); // YYYY-MM-DD
+    const addDays = (d, n)=>{ const dt=new Date(d); dt.setDate(dt.getDate()+n); return dt.toISOString().slice(0,10); };
+    const startOfWeekMonday = (d)=>{ const dt=new Date(d); const day=(dt.getDay()+6)%7; dt.setDate(dt.getDate()-day); return dt.toISOString().slice(0,10); };
+
+    // ======= Almacenamiento =======
+    const LS_KEYS = {
+        MENU: 'ps_menu',
+        STATUS: 'ps_status', // { YYYY-MM-DD: { Desayuno: 0..3, ... } }
+        GYM: 'ps_gym',       // { YYYY-MM-DD: n }
+        POOP: 'ps_poop',     // { YYYY-MM-DD: n }
+        LISTA: 'ps_lista_custom' // modificaciones manuales por semana {weekStart: {name:{qty,unit}}}
+    };
+
+    const storage = {
+        getMenu(){ return JSON.parse(localStorage.getItem(LS_KEYS.MENU) || 'null') || DEFAULT_MENU; },
+        setMenu(obj){ localStorage.setItem(LS_KEYS.MENU, JSON.stringify(obj)); },
+        getStatus(){ return JSON.parse(localStorage.getItem(LS_KEYS.STATUS) || '{}'); },
+        setStatus(obj){ localStorage.setItem(LS_KEYS.STATUS, JSON.stringify(obj)); },
+        getGym(){ return JSON.parse(localStorage.getItem(LS_KEYS.GYM) || '{}'); },
+        setGym(obj){ localStorage.setItem(LS_KEYS.GYM, JSON.stringify(obj)); },
+        getPoop(){ return JSON.parse(localStorage.getItem(LS_KEYS.POOP) || '{}'); },
+        setPoop(obj){ localStorage.setItem(LS_KEYS.POOP, JSON.stringify(obj)); },
+        getLista(){ return JSON.parse(localStorage.getItem(LS_KEYS.LISTA) || '{}'); },
+        setLista(obj){ localStorage.setItem(LS_KEYS.LISTA, JSON.stringify(obj)); },
+    };
+
+    // ======= Render Hoy =======
+    let currentDate = todayISO();
+
+    function getMenuForDate(iso){
+        const menu = storage.getMenu();
+        const dt = new Date(iso);
+        const weekday = DAY_NAMES[dt.getDay()] === 'Sabado' ? 'Sábado' : DAY_NAMES[dt.getDay()];
+        // Mapa español correcto
+        const map = {"Lunes":"Lunes","Martes":"Martes","Miércoles":"Miércoles","Miercoles":"Miércoles","Jueves":"Jueves","Viernes":"Viernes","Sábado":"Sábado","Domingo":"Domingo"};
+        // Hallar nombre real del objeto
+        const key = Object.keys(menu).find(k=>k.toLowerCase().startsWith(weekday.toLowerCase().slice(0,4))) || weekday;
+        return { dayName: map[key]||key, items: menu[key] };
+    }
+
+    function ensureStatusDay(iso){
+        const st = storage.getStatus();
+        if(!st[iso]){ st[iso] = {}; MEALS.forEach(m=>st[iso][m]=0); storage.setStatus(st); }
+        return st[iso];
+    }
+
+    function cycleStatus(iso, meal){
+        const st = storage.getStatus();
+        if(!st[iso]) st[iso]={};
+        const v = (st[iso][meal]||0); // 0..3
+        st[iso][meal] = (v+1)%4;
+        storage.setStatus(st);
+        renderHoy();
+        renderQuincena();
+    }
+
+    function statusClass(v){ return `status-${v||0}`; }
+    function statusText(v){ return ['Sin marcar','Verde','Naranja','Rojo'][v||0]; }
+
+    function renderHoy(){
+        const {dayName, items} = getMenuForDate(currentDate);
+        document.getElementById('hoyTitle').textContent = `${dayName} — ${currentDate}`;
+        const weekStart = startOfWeekMonday(currentDate);
+        document.getElementById('weekInfo').textContent = `Semana desde ${weekStart}`;
+
+        const container = document.getElementById('cardsHoy');
+        container.innerHTML = '';
+        const stDay = ensureStatusDay(currentDate);
+        MEALS.forEach(meal => {
+            const list = (items && items[meal]) ? items[meal] : [];
+            const statusVal = stDay[meal] ?? 0;
+            const col = document.createElement('div');
+            col.className = 'col-12 col-md-6 col-xl-3';
+            col.innerHTML = `
+        <div class="card meal-card h-100">
+          <div class="card-body d-flex flex-column">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <h5 class="card-title mb-0">${meal}</h5>
+              <button class="btn btn-sm btn-outline-secondary" data-meal="${meal}">Cambiar</button>
+            </div>
+            <ul class="mb-3">${list.map(i=>`<li>${i}</li>`).join('')}</ul>
+            <div class="mt-auto d-flex align-items-center justify-content-between">
+              <div class="small-muted"><span class="status-dot ${statusClass(statusVal)}"></span>${statusText(statusVal)}</div>
+              <div class="btn-group">
+                <button class="btn btn-sm btn-outline-success" data-set="1" data-meal="${meal}">Verde</button>
+                <button class="btn btn-sm btn-outline-warning" data-set="2" data-meal="${meal}">Naranja</button>
+                <button class="btn btn-sm btn-outline-danger" data-set="3" data-meal="${meal}">Rojo</button>
+              </div>
+            </div>
+          </div>
+        </div>`;
+            container.appendChild(col);
+        });
+    }
+
+    // ======= Quincena =======
+    let quinStart = addDays(todayISO(), -14); // ventana que termina hoy
+
+    function daySummary(iso){
+        const st = storage.getStatus();
+        const s = st[iso] || {};
+        const vals = MEALS.map(m=>s[m]||0);
+        const counts = [0,0,0,0];
+        vals.forEach(v=>counts[v]++);
+        return { vals, counts };
+    }
+
+    function renderQuincena(){
+        const grid = document.getElementById('quinGrid');
+        grid.innerHTML = '';
+        const statsDiv = document.getElementById('quinStats');
+        statsDiv.innerHTML = '';
+
+        // Encabezado semanal
+        const weeks = [startOfWeekMonday(quinStart), startOfWeekMonday(addDays(quinStart,7))];
+
+        // Stats agregadas
+        let total = {verde:0, naranja:0, rojo:0};
+        let gymTotal = 0, poopTotal = 0;
+
+        for(let i=0;i<14;i++){
+            const d = addDays(quinStart,i);
+            const {counts} = daySummary(d);
+            total.verde += counts[1];
+            total.naranja += counts[2];
+            total.rojo += counts[3];
+            const gym = storage.getGym()[d]||0;
+            const poop = storage.getPoop()[d]||0;
+            gymTotal+=gym; poopTotal+=poop;
+
+            const cell = document.createElement('div');
+            cell.className='day-cell';
+            const nd = new Date(d);
+            const short = nd.toLocaleDateString('es-ES',{weekday:'short', day:'2-digit'});
+            cell.innerHTML = `
+        <h6>${short}</h6>
+        <div class="d-flex align-items-center gap-2 mb-1">
+          <span class="status-dot status-1" style="opacity:${counts[1]?1:.25}"></span>
+          <span class="status-dot status-2" style="opacity:${counts[2]?1:.25}"></span>
+          <span class="status-dot status-3" style="opacity:${counts[3]?1:.25}"></span>
+        </div>
+        <div class="small-muted">Gim: ${gym} · 💩: ${poop}</div>
+      `;
+            grid.appendChild(cell);
+        }
+
+        const col = document.createElement('div');
+        col.className='col-12 col-lg-6';
+        col.innerHTML = `
+      <div class="card card-clean">
+        <div class="card-body">
+          <h5 class="mb-2">Semáforos (14 días)</h5>
+          <div class="d-flex gap-3">
+            <span><span class="legend-dot" style="background:var(--green)"></span>Verde <span class="badge text-bg-success">${total.verde}</span></span>
+            <span><span class="legend-dot" style="background:var(--orange)"></span>Naranja <span class="badge text-bg-warning">${total.naranja}</span></span>
+            <span><span class="legend-dot" style="background:var(--red)"></span>Rojo <span class="badge text-bg-danger">${total.rojo}</span></span>
+          </div>
+        </div>
+      </div>`;
+        statsDiv.appendChild(col);
+
+        const col2 = document.createElement('div');
+        col2.className='col-12 col-lg-6';
+        col2.innerHTML = `
+      <div class="card card-clean">
+        <div class="card-body">
+          <h5 class="mb-2">Hábitos (14 días)</h5>
+          <div class="d-flex gap-3">
+            <span>💪 Gimnasio <span class="badge text-bg-primary">${gymTotal}</span></span>
+            <span>💩 Baño <span class="badge text-bg-secondary">${poopTotal}</span></span>
+          </div>
+        </div>
+      </div>`;
+        statsDiv.appendChild(col2);
+    }
+
+    // ======= Lista de la compra =======
+    function parseItem(str){
+        // Extrae cantidad + unidad si existe; retorna {name, qty, unit}
+        // Casos soportados: "50g de pavo", "Aceitunas verdes 8ud", "2 huevos", "1 onza de chocolate"
+        let s = str.trim();
+        // Ignorar instrucciones genéricas
+        const ignore = [/verduras infinitas/i, /fajipizza/i, /ingredientes que quieras/i];
+        if(ignore.some(r=>r.test(s))) return null;
+
+        // Normalizaciones
+        s = s.replace(/\s+/g,' ').replace(/\(.*?\)/g,'').trim();
+
+        // Patrones
+        const patterns = [
+            /^(\d+(?:[\.,]\d+)?)\s*(g|gr|gramos)\s+de\s+(.+)$/i,
+            /^(\d+(?:[\.,]\d+)?)\s*(g|gr|gramos)\b\s*(.+)$/i,
+            /^(\d+(?:[\.,]\d+)?)\s*(ud|uds|unidad(?:es)?)\b\s*(.+)$/i,
+            /^(\d+(?:[\.,]\d+)?)\s*(lata(?:s)?)\b\s*(de\s+)?(.+)$/i,
+            /^(\d+(?:[\.,]\d+)?)\s*(onza(?:s)?)\s+de\s+(.+)$/i,
+            /^(\d+(?:[\.,]\d+)?)\s*(huevo(?:s)?)\b\s*(.*)$/i,
+            /^(\d+(?:[\.,]\d+)?)\s*(ml|cl|l)\b\s*(.+)$/i,
+            /^(\d+(?:[\.,]\d+)?)\s*(?:de\s+)?(.+)$/i,
+            /^(.+?)\s+(\d+(?:[\.,]\d+)?)\s*(g|gr|gramos|ud|uds|unidad(?:es)?|onza(?:s)?)$/i
+        ];
+
+        for(const p of patterns){
+            const m = s.match(p);
+            if(m){
+                if(p===patterns[3]){
+                    return { name: (m[4]||m[3]||'').replace(/^de\s+/i,'').trim(), qty: Number(m[1].replace(',','.')), unit: 'lata' };
+                }
+                if(p===patterns[8]){
+                    return { name: m[1].trim(), qty: Number(m[2].replace(',','.')), unit: m[3].toLowerCase() };
+                }
+                const name = (m[m.length-1]||'').trim();
+                const unit = (m[2]||'').toLowerCase() || '';
+                const qty = Number((m[1]||'0').toString().replace(',','.')) || 1;
+                return { name, qty, unit };
+            }
+        }
+
+        // Sin cantidad -> 1 unidad
+        return { name: s, qty: 1, unit: 'ud' };
+    }
+
+    function normalizeName(name){
+        let n = name.toLowerCase().trim();
+        const map = {
+            'jamón serrano':'jamon serrano', 'queso curado':'queso curado', 'pavo':'pavo',
+            'frutos secos':'frutos secos', 'frutos rojos':'frutos rojos', 'yogur griego':'yogur griego',
+            'griego ligero':'yogur griego ligero', 'patata':'patata', 'arroz':'arroz', 'quinoa':'quinoa',
+            'aguacate':'aguacate', 'aceitunas verdes':'aceitunas verdes', 'salmon':'salmón', 'salmón':'salmón',
+            'pescado blanco':'pescado blanco', 'ternera':'ternera', 'pollo':'pollo', 'pechuga de pollo':'pechuga de pollo',
+            'filete de pollo':'pechuga de pollo', 'huevos':'huevos', 'huevo':'huevos', 'atún':'atún', 'atun':'atún',
+            'lomo embuchado':'lomo embuchado', 'avellanas':'avellanas', 'chocolate':'chocolate', 'calamares':'calamares',
+            'garbanzos':'garbanzos', 'tortitas de legumbres':'tortitas de legumbres', 'tortita de avena':'avena',
+        };
+        // Intenta map exacto
+        for(const k of Object.keys(map)){
+            if(n.includes(k)) return map[k];
+        }
+        return n;
+    }
+
+    function aggregateWeek(weekStartISO, includeVerduras=true){
+        const menu = storage.getMenu();
+        const out = {}; // name -> {qty, unit}
+        const days = ['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'];
+        const start = new Date(weekStartISO);
+
+        for(let i=0;i<7;i++){
+            const dayName = days[i];
+            const itemsByMeal = menu[dayName]||{};
+            for(const meal of MEALS){
+                const list = itemsByMeal[meal]||[];
+                for(const raw of list){
+                    if(!includeVerduras && /verduras infinitas/i.test(raw)) continue;
+                    const parsed = parseItem(raw);
+                    if(!parsed) continue;
+                    const key = normalizeName(parsed.name);
+                    const unit = parsed.unit || 'ud';
+                    out[key] = out[key] || {qty:0, unit};
+                    out[key].qty += parsed.qty;
+                    // Si aparecen unidades distintas, no complicamos: marcamos unit='var'
+                    if(out[key].unit !== unit) out[key].unit = 'var';
+                }
+            }
+        }
+        return out;
+    }
+
+    function renderLista(){
+        const includeVerd = document.getElementById('toggleVerduras').checked;
+        const weekSel = document.getElementById('weekSelect');
+        const weekStart = weekSel.value || startOfWeekMonday(todayISO());
+        const agg = aggregateWeek(weekStart, includeVerd);
+
+        // Mezclar con personalizaciones
+        const custom = storage.getLista()[weekStart] || {};
+        for(const [name,data] of Object.entries(custom)){
+            if(!agg[name]) agg[name] = {qty:0,unit:data.unit||'ud'};
+            agg[name].qty = data.qty; agg[name].unit = data.unit||agg[name].unit;
+        }
+
+        const container = document.getElementById('listaCompra');
+        container.innerHTML = '';
+
+        const entries = Object.entries(agg).sort((a,b)=>a[0].localeCompare(b[0]));
+        if(!entries.length){ container.innerHTML = '<p class="text-muted">No hay elementos.</p>'; return; }
+
+        const list = document.createElement('div');
+        list.className = 'list-group';
+
+        for(const [name, info] of entries){
+            const row = document.createElement('div');
+            row.className = 'list-group-item d-flex align-items-center justify-content-between shopping-row';
+            row.innerHTML = `
+        <div class="me-2 flex-grow-1">
+          <input class="form-control form-control-sm item-name" value="${name}"/>
+        </div>
+        <div class="d-flex align-items-center gap-2">
+          <input type="number" step="0.5" class="form-control form-control-sm item-qty" style="width:90px" value="${(+info.qty).toFixed(2).replace(/\.00$/,'')}" />
+          <input class="form-control form-control-sm item-unit" style="width:100px" value="${info.unit}" />
+          <button class="btn btn-sm btn-outline-danger btn-del">✕</button>
+        </div>`;
+            list.appendChild(row);
+        }
+
+        container.appendChild(list);
+
+        // Eventos de edición
+        list.querySelectorAll('.list-group-item').forEach(li=>{
+            const nameInput = li.querySelector('.item-name');
+            const qtyInput = li.querySelector('.item-qty');
+            const unitInput = li.querySelector('.item-unit');
+            const delBtn = li.querySelector('.btn-del');
+            const save = ()=>{
+                const keyName = nameInput.value.toLowerCase().trim();
+                const data = storage.getLista();
+                data[weekStart] = data[weekStart] || {};
+                data[weekStart][keyName] = {qty: parseFloat(qtyInput.value||'0'), unit: unitInput.value.trim()||'ud'};
+                storage.setLista(data);
+            };
+            nameInput.addEventListener('change', save);
+            qtyInput.addEventListener('change', save);
+            unitInput.addEventListener('change', save);
+            delBtn.addEventListener('click', ()=>{
+                const data = storage.getLista();
+                data[weekStart] = data[weekStart] || {};
+                delete data[weekStart][nameInput.value.toLowerCase().trim()];
+                storage.setLista(data);
+                renderLista();
+            });
+        });
+    }
+
+    function populateWeekSelect(){
+        const sel = document.getElementById('weekSelect');
+        sel.innerHTML = '';
+        // 8 semanas alrededor de hoy
+        for(let i=-3;i<=4;i++){
+            const ws = startOfWeekMonday(addDays(todayISO(), i*7));
+            const dt = new Date(ws);
+            const label = `${dt.toLocaleDateString('es-ES',{day:'2-digit', month:'2-digit'})}`;
+            const opt = document.createElement('option');
+            opt.value = ws; opt.textContent = `Semana ${label}`; if(i==0) opt.selected = true;
+            sel.appendChild(opt);
+        }
+    }
+
+    // ======= Hábitos =======
+    function setHabit(objKey, delta){
+        const iso = currentDate; // sobre la fecha mostrada en HOY
+        const map = objKey==='gym'? storage.getGym(): storage.getPoop();
+        map[iso] = Math.max(0, (map[iso]||0) + delta);
+        objKey==='gym'? storage.setGym(map): storage.setPoop(map);
+        renderHabitos();
+        renderQuincena();
+    }
+
+    function renderHabitos(){
+        const iso = currentDate;
+        const gym = storage.getGym();
+        const poop = storage.getPoop();
+
+        // Hoy
+        document.getElementById('gymToday').value = gym[iso]||0;
+        document.getElementById('poopToday').value = poop[iso]||0;
+
+        const weekStart = startOfWeekMonday(iso);
+        const gymWrap = document.getElementById('gymWeek');
+        const poopWrap = document.getElementById('poopWeek');
+        gymWrap.innerHTML = ''; poopWrap.innerHTML='';
+
+        let gymSum=0, poopSum=0;
+        for(let i=0;i<7;i++){
+            const d = addDays(weekStart,i);
+            const label = new Date(d).toLocaleDateString('es-ES',{weekday:'short', day:'2-digit'});
+            gymSum += (gym[d]||0); poopSum += (poop[d]||0);
+            const chip = (val, emoji)=>`<span class="badge text-bg-light week-badge">${label}: ${emoji}${val}</span>`;
+            gymWrap.insertAdjacentHTML('beforeend', chip(gym[d]||0,'💪'));
+            poopWrap.insertAdjacentHTML('beforeend', chip(poop[d]||0,'💩'));
+        }
+        document.getElementById('gymWeekBadge').textContent = `Semana: ${gymSum} sesiones`;
+        document.getElementById('poopWeekBadge').textContent = `Semana: ${poopSum} veces`;
+    }
+
+    // ======= Export/Import =======
+    function exportData(){
+        const data = {
+            menu: storage.getMenu(), status: storage.getStatus(), gym: storage.getGym(), poop: storage.getPoop(), lista: storage.getLista()
+        };
+        const blob = new Blob([JSON.stringify(data,null,2)], {type:'application/json'});
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = `planificador-saludable-${todayISO()}.json`;
+        document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+    }
+
+    function importData(file){
+        const reader = new FileReader();
+        reader.onload = e => {
+            try{
+                const obj = JSON.parse(e.target.result);
+                if(obj.menu) storage.setMenu(obj.menu);
+                if(obj.status) storage.setStatus(obj.status);
+                if(obj.gym) storage.setGym(obj.gym);
+                if(obj.poop) storage.setPoop(obj.poop);
+                if(obj.lista) storage.setLista(obj.lista);
+                initAll();
+                alert('Datos importados');
+            }catch(err){ alert('Archivo no válido'); }
+        };
+        reader.readAsText(file);
+    }
+
+    // ======= Inicialización & eventos =======
+    function initAll(){
+        // Menu JSON en config
+        document.getElementById('menuJson').value = JSON.stringify(storage.getMenu(), null, 2);
+        populateWeekSelect();
+        renderHoy();
+        renderQuincena();
+        renderLista();
+        renderHabitos();
+    }
+
+    document.addEventListener('click', (ev)=>{
+        const t = ev.target;
+        if(t.matches('[data-meal]') && t.matches('.btn-outline-secondary')){ // botón "Cambiar"
+            cycleStatus(currentDate, t.getAttribute('data-meal'));
+        }
+        if(t.matches('[data-set]')){
+            const meal = t.getAttribute('data-meal');
+            const v = parseInt(t.getAttribute('data-set'));
+            const st = storage.getStatus();
+            st[currentDate] = st[currentDate] || {}; st[currentDate][meal] = v; storage.setStatus(st);
+            renderHoy(); renderQuincena();
+        }
+        if(t.id==='btnPrevDay'){ currentDate = addDays(currentDate, -1); renderHoy(); renderHabitos(); }
+        if(t.id==='btnNextDay'){ currentDate = addDays(currentDate, +1); renderHoy(); renderHabitos(); }
+        if(t.id==='btnPrev14'){ quinStart = addDays(quinStart, -14); renderQuincena(); }
+        if(t.id==='btnNext14'){ quinStart = addDays(quinStart, +14); renderQuincena(); }
+        if(t.id==='btnGenLista'){ renderLista(); }
+        if(t.id==='btnCopyLista'){
+            const txt = [...document.querySelectorAll('#listaCompra .list-group-item')].map(li=>{
+                const n = li.querySelector('.item-name').value; const q = li.querySelector('.item-qty').value; const u = li.querySelector('.item-unit').value; return `- ${n}: ${q} ${u}`; }).join('\n');
+            navigator.clipboard.writeText(txt).then(()=>{ alert('Lista copiada'); });
+        }
+        if(t.id==='btnPrintLista'){ window.print(); }
+        if(t.id==='btnAddItem'){
+            const weekStart = document.getElementById('weekSelect').value;
+            const data = storage.getLista(); data[weekStart] = data[weekStart] || {}; data[weekStart]['nuevo item'] = {qty:1, unit:'ud'}; storage.setLista(data); renderLista();
+        }
+        if(t.id==='btnSaveMenu'){
+            try{ const obj = JSON.parse(document.getElementById('menuJson').value); storage.setMenu(obj); alert('Menú guardado'); renderHoy(); renderLista(); }
+            catch(e){ alert('JSON inválido'); }
+        }
+        if(t.id==='btnResetAll'){
+            if(confirm('Esto borrará todos los datos locales. ¿Continuar?')){
+                localStorage.removeItem(LS_KEYS.MENU);
+                localStorage.removeItem(LS_KEYS.STATUS);
+                localStorage.removeItem(LS_KEYS.GYM);
+                localStorage.removeItem(LS_KEYS.POOP);
+                localStorage.removeItem(LS_KEYS.LISTA);
+                initAll();
+            }
+        }
+        if(t.id==='btnExport') exportData();
+    });
+
+    document.getElementById('importFile').addEventListener('change', (e)=>{
+        if(e.target.files && e.target.files[0]) importData(e.target.files[0]);
+    });
+
+    document.getElementById('toggleVerduras').addEventListener('change', renderLista);
+    document.getElementById('weekSelect').addEventListener('change', renderLista);
+
+    document.getElementById('gymPlus').addEventListener('click', ()=> setHabit('gym', +1));
+    document.getElementById('gymMinus').addEventListener('click', ()=> setHabit('gym', -1));
+    document.getElementById('poopPlus').addEventListener('click', ()=> setHabit('poop', +1));
+    document.getElementById('poopMinus').addEventListener('click', ()=> setHabit('poop', -1));
+    document.getElementById('gymToday').addEventListener('change', (e)=>{ const m=storage.getGym(); m[currentDate]=Math.max(0,parseInt(e.target.value||'0')); storage.setGym(m); renderHabitos(); renderQuincena(); });
+    document.getElementById('poopToday').addEventListener('change', (e)=>{ const m=storage.getPoop(); m[currentDate]=Math.max(0,parseInt(e.target.value||'0')); storage.setPoop(m); renderHabitos(); renderQuincena(); });
+
+    // Inicializar
+    initAll();
+</script>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
